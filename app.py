@@ -17,16 +17,36 @@ st.set_page_config(
 
 
 # ============================================================
-# LOAD GEMINI API KEY
+# API KEY
+# Works locally with .env
+# Works on Streamlit Cloud with Secrets
 # ============================================================
 
 load_dotenv()
 
-API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY = None
+
+# First try Streamlit Cloud Secrets
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    pass
+
+# If not found, try local .env
+if not API_KEY:
+    API_KEY = os.getenv("GEMINI_API_KEY")
+
+
+# ============================================================
+# CHECK API KEY
+# ============================================================
 
 if not API_KEY:
     st.error("❌ Gemini API key not found.")
-    st.info("Please check your .env file.")
+    st.info(
+        "For Streamlit Cloud, add GEMINI_API_KEY in "
+        "Manage app → Settings → Secrets."
+    )
     st.stop()
 
 
@@ -36,12 +56,11 @@ if not API_KEY:
 
 client = genai.Client(api_key=API_KEY)
 
-# Updated model
 MODEL_NAME = "gemini-3.5-flash"
 
 
 # ============================================================
-# TITLE
+# PAGE TITLE
 # ============================================================
 
 st.title("🌱 Smart Plant Health & Care Assistant")
@@ -51,8 +70,8 @@ st.markdown(
     ### 🤖 AI-Powered Plant Analysis
 
     Upload a photo of your plant and let AI analyze its appearance,
-    identify the plant, detect possible visible problems, and provide
-    personalized care recommendations.
+    identify the plant, identify possible visible issues, and provide
+    personalized plant-care recommendations.
     """
 )
 
@@ -126,14 +145,13 @@ uploaded_file = st.file_uploader(
 
 
 # ============================================================
-# DISPLAY IMAGE
+# IMAGE PREVIEW
 # ============================================================
 
 if uploaded_file is not None:
 
     image_bytes = uploaded_file.getvalue()
-
-    file_type = uploaded_file.type
+    mime_type = uploaded_file.type
 
     st.success("✅ Image uploaded successfully!")
 
@@ -145,7 +163,6 @@ if uploaded_file is not None:
 
     st.divider()
 
-
     # ========================================================
     # ANALYZE BUTTON
     # ========================================================
@@ -155,7 +172,6 @@ if uploaded_file is not None:
         type="primary",
         use_container_width=True
     )
-
 
     if analyze_button:
 
@@ -195,24 +211,28 @@ IMPORTANT:
 Return your answer using exactly these sections:
 
 1. 🌿 Plant Identification
+
 Include:
 - Common name
 - Scientific name
 - Identification confidence
 
 2. 📝 Plant Description
+
 Briefly describe the plant and its visible characteristics.
 
 3. ❤️ Visible Plant Health
+
 Describe:
 - Leaf condition
-- Color
+- Leaf color
 - Growth
 - Stem condition
 - Flowers/fruits if visible
 - Overall visible health
 
 4. 🚨 Possible Problems
+
 Mention any visible or possible issues such as:
 - Yellowing
 - Browning
@@ -223,16 +243,20 @@ Mention any visible or possible issues such as:
 - Nutrient deficiency symptoms
 - Overwatering
 - Underwatering
+
 If there are no obvious problems, say so.
 
 5. 💧 Watering Recommendation
+
 Explain:
 - Whether the plant likely needs water
 - How often it should normally be watered
 - How to check soil moisture
-- Signs of overwatering and underwatering
+- Signs of overwatering
+- Signs of underwatering
 
 6. ☀️ Sunlight Requirement
+
 Explain:
 - Required sunlight
 - Indoor/outdoor placement
@@ -240,12 +264,14 @@ Explain:
 - Whether the current location is suitable
 
 7. 🌱 Soil Requirement
+
 Explain:
 - Suitable soil type
 - Drainage requirements
 - Recommended soil mixture if appropriate
 
 8. 🌿 Fertilizer Recommendation
+
 Explain:
 - Whether fertilizer is needed
 - Suitable fertilizer type
@@ -253,32 +279,40 @@ Explain:
 - Avoid excessive fertilizer
 
 9. 🌡️ Temperature & Environment
+
 Explain:
 - Suitable temperature range
 - Humidity requirements if relevant
 - Environmental conditions
 
 10. ✂️ Pruning & Maintenance
+
 Explain:
 - When to prune
 - What parts can be removed
 - Basic maintenance steps
 
 11. 🐛 Common Pests
-List common pests that may affect this plant and simple prevention methods.
+
+List common pests that may affect this plant and simple
+prevention methods.
 
 12. 🦠 Common Diseases
+
 List common diseases that can affect this plant.
-Do NOT claim that the plant definitely has a disease unless it is clearly
-supported by visible evidence.
+
+Do NOT claim that the plant definitely has a disease unless it is
+clearly supported by visible evidence.
 
 13. 🌦️ Seasonal Care
+
 Give simple advice for:
 - Summer
 - Rainy season
 - Winter
 
 14. 💡 Personalized Care Tips
+
 Give 5 practical care tips specifically considering:
 - The uploaded image
 - Plant location
@@ -286,10 +320,14 @@ Give 5 practical care tips specifically considering:
 - Last watering information
 
 15. ⭐ Overall Plant Care Score
-Give a score from 1 to 10 based on the visible condition of the plant.
+
+Give a score from 1 to 10 based on the visible condition of the
+plant.
+
 Explain the reason briefly.
 
 16. ⚠️ Important Warning
+
 Mention that AI image analysis is an assistive tool and that serious
 plant disease or pest problems should be confirmed by a gardening,
 agriculture, or plant-health expert.
@@ -297,9 +335,8 @@ agriculture, or plant-health expert.
 Keep the response clear, structured, and beginner-friendly.
 """
 
-
             # ====================================================
-            # SEND IMAGE + PROMPT TO GEMINI
+            # SEND IMAGE TO GEMINI
             # ====================================================
 
             try:
@@ -315,26 +352,32 @@ Keep the response clear, structured, and beginner-friendly.
                                 ),
                                 types.Part.from_bytes(
                                     data=image_bytes,
-                                    mime_type=file_type
+                                    mime_type=mime_type
                                 )
                             ]
                         )
                     ]
                 )
 
-
                 # =================================================
-                # GET AI RESPONSE
+                # GET RESPONSE
                 # =================================================
 
                 result = response.text
 
+                if not result:
+                    st.error(
+                        "❌ Gemini returned an empty response."
+                    )
+                    st.stop()
 
                 # =================================================
                 # DISPLAY RESULTS
                 # =================================================
 
-                st.success("✅ Plant analysis completed!")
+                st.success(
+                    "✅ Plant analysis completed successfully!"
+                )
 
                 st.divider()
 
@@ -343,7 +386,6 @@ Keep the response clear, structured, and beginner-friendly.
                 st.markdown(result)
 
                 st.divider()
-
 
                 # =================================================
                 # DOWNLOAD REPORT
@@ -363,8 +405,12 @@ AI ANALYSIS
 {result}
 
 ===================================
-Generated using AI-assisted image analysis.
-Identification and health observations may not be certain.
+
+This report was generated using AI-assisted
+multimodal plant image analysis.
+
+Plant identification and health observations
+may not always be certain.
 """
 
                 st.download_button(
@@ -375,7 +421,6 @@ Identification and health observations may not be certain.
                     use_container_width=True
                 )
 
-
             # ====================================================
             # ERROR HANDLING
             # ====================================================
@@ -385,17 +430,17 @@ Identification and health observations may not be certain.
                 st.error("❌ AI analysis failed.")
 
                 st.warning(
-                    "Please check your Gemini API key, internet connection, "
-                    "and Gemini model availability."
+                    "Please check your Gemini API key, "
+                    "internet connection, and Gemini model availability."
                 )
 
                 st.code(str(e))
 
-
 else:
 
     st.info(
-        "👆 Please upload a plant image above to start the AI analysis."
+        "👆 Please upload a plant image above to start "
+        "the AI analysis."
     )
 
 
